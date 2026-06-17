@@ -1,0 +1,7 @@
+{
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.128.0",
+    "@figma/widget-typings": "^1.12.1",
+    "typescript": "^6.0.3"
+  }
+}

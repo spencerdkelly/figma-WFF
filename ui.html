@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<script>console.log("UI VERSION: 5.6");</script>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      body {
+        font-family: Inter, sans-serif;
+        margin: 16px;
+      }
+
+      label {
+        display: block;
+        margin-top: 12px;
+        font-size: 13px;
+      }
+
+      input[type="text"] {
+        width: 100%;
+        padding: 8px;
+        margin-top: 4px;
+        box-sizing: border-box;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+      }
+
+      .locale-group {
+        margin-top: 12px;
+        font-size: 13px;
+      }
+
+      button {
+        margin-top: 16px;
+        width: 100%;
+        padding: 10px;
+        background: #0d99ff;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        font-size: 14px;
+        cursor: pointer;
+        position: relative;
+      }
+
+      button.loading {
+        background: #007be5;
+        cursor: wait;
+      }
+
+      .spinner {
+        display: none;
+        position: absolute;
+        right: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 14px;
+        height: 14px;
+        border: 2px solid white;
+        border-top-color: transparent;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+
+      button.loading .spinner {
+        display: inline-block;
+      }
+
+      @keyframes spin {
+        from { transform: translateY(-50%) rotate(0deg); }
+        to { transform: translateY(-50%) rotate(360deg); }
+      }
+
+      #status {
+        margin-top: 10px;
+        font-size: 12px;
+        color: #555;
+        min-height: 16px;
+      }
+    </style>
+  </head>
+
+  <body>
+    <label>
+      Enter company name:
+      <input id="input" type="text" placeholder="Company" />
+    </label>
+
+    <div class="locale-group">
+      <strong>English variant:</strong><br />
+      <label><input type="radio" name="locale" value="us" checked /> US English</label>
+      <label><input type="radio" name="locale" value="uk" /> UK English</label>
+    </div>
+
+    <button id="replace">
+      Setup
+      <div class="spinner"></div>
+    </button>
+
+    <div id="status"></div>
+
+    <script>
+      const button = document.getElementById("replace");
+      const status = document.getElementById("status");
+
+      let selectedLocale = "us";
+
+      button.onclick = function () {
+        const input = document.getElementById("input").value.trim();
+
+        const localeInputs = document.getElementsByName("locale");
+        for (let i = 0; i < localeInputs.length; i++) {
+          if (localeInputs[i].checked) selectedLocale = localeInputs[i].value;
+        }
+
+        if (!input) {
+          status.textContent = "Please enter a company name.";
+          return;
+        }
+
+        // Show loading state
+        button.classList.add("loading");
+        status.textContent = "Starting…";
+
+        parent.postMessage(
+        {
+            pluginMessage: {
+                type: "replace",
+                value: input,
+                locale: selectedLocale
+            }
+        },
+        "*"
+        );
+
+      };
+
+      // Listen for progress + completion messages from backend
+      window.onmessage = (event) => {
+        const msg = event.data.pluginMessage;
+        if (!msg) return;
+
+        if (msg.type === "progress") {
+          if (msg.stage === "company") {
+            status.textContent = "Updating company name…";
+          }
+
+          if (msg.stage === "locale") {
+            status.textContent =
+              selectedLocale === "uk"
+                ? "Updating spelling to UK English…"
+                : "Updating spelling to US English…";
+          }
+        }
+
+        if (msg.type === "done") {
+          button.classList.remove("loading");
+          status.textContent = "✅ Update complete!";
+        }
+      };
+    </script>
+  </body>
+</html>

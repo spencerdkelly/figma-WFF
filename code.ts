@@ -1,0 +1,165 @@
+// ======================================================
+//  WFF Setup — Figma Plugin Backend (stable version)
+// ======================================================
+
+console.log("PLUGIN VERSION: 5.6");
+
+const TARGET = "[Company Name]";
+
+// US ↔ UK spelling maps
+const US_TO_UK: { [key: string]: string } = {
+  "color": "colour",
+  "organize": "organise",
+  "organization": "organisation",
+  "analyze": "analyse",
+  "center": "centre",
+  "fulfil": "fulfill",
+  "labor": "labour",
+  "specialize": "specialise",
+  "specialised": "specialized"
+};
+
+const UK_TO_US: { [key: string]: string } = {
+  "colour": "color",
+  "organise": "organize",
+  "organisation": "organization",
+  "analyse": "analyze",
+  "centre": "center",
+  "fulfill": "fulfil",
+  "labour": "labor",
+  "specialise": "specialize",
+  "specialised": "specialized"
+};
+
+figma.showUI(__html__, { width: 350, height: 250 });
+
+figma.ui.onmessage = async (msg) => {
+  // This is how Figma actually delivers pluginMessage:
+  // msg = { type, value, locale }
+  console.log("RAW MESSAGE:", msg);
+
+  if (!msg || msg.type !== "replace") {
+    console.log("Message ignored:", msg);
+    return;
+  }
+
+  const replacement = msg.value.trim();
+  const locale = msg.locale || "us";
+
+  if (!replacement) {
+    figma.ui.postMessage({ type: "done" });
+    return;
+  }
+
+  // REQUIRED for dynamic-page access
+  await figma.loadAllPagesAsync();
+
+  const slug = replacement.toLowerCase().replace(/\s+/g, "");
+
+  const textNodes = figma.root.findAll(
+    (n) => n.type === "TEXT"
+  ) as TextNode[];
+
+  // Pre-compile regexes
+  const escapedTarget = TARGET.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const tokenRegex = new RegExp(escapedTarget, "g");
+  const companyRegex = /companyname/g;
+
+  const localeMap = locale === "uk" ? US_TO_UK : UK_TO_US;
+  const localeKeys = Object.keys(localeMap).join("|");
+
+  // Non-global regex for checking
+  const localeTestRegex = new RegExp("\\b(" + localeKeys + ")\\b", "i");
+
+  // Global regex for replacing
+  const localeReplaceRegex = new RegExp("\\b(" + localeKeys + ")\\b", "gi");
+
+  console.log("TEXT NODE COUNT:", textNodes.length);
+  for (const node of textNodes) {
+    const original = node.characters;
+    if (!original || original.length === 0) continue;
+
+    const lower = original.toLowerCase();
+
+    const needsCompany =
+      original.indexOf(TARGET) !== -1 || lower.indexOf("companyname") !== -1;
+
+    const needsLocale = localeTestRegex.test(lower);
+
+    if (!needsCompany && !needsLocale) continue;
+
+    const fontsOk = await loadAllFontsInNode(node);
+    if (!fontsOk) continue;
+
+    let updated = original;
+
+    // Stage 1 — Company name replacement
+    figma.ui.postMessage({ type: "progress", stage: "company" });
+
+    if (updated.indexOf(TARGET) !== -1) {
+      updated = updated.replace(tokenRegex, replacement);
+    }
+    if (updated.toLowerCase().indexOf("companyname") !== -1) {
+      updated = updated.replace(companyRegex, slug);
+    }
+
+    // Stage 2 — Locale conversion
+    figma.ui.postMessage({ type: "progress", stage: "locale" });
+
+    updated = updated.replace(localeReplaceRegex, (match) => {
+      const key = match.toLowerCase();
+      return localeMap[key] || match;
+    });
+
+    if (updated !== original) {
+      node.characters = updated;
+    }
+  }
+
+  figma.ui.postMessage({ type: "done" });
+};
+
+// ======================================================
+//  Font Loader — Skips nodes with unloadable fonts
+// ======================================================
+
+async function loadAllFontsInNode(node: TextNode): Promise<boolean> {
+  const len = node.characters.length;
+  if (len === 0) return true;
+
+  let fonts: FontName[];
+  try {
+    fonts = node.getRangeAllFontNames(0, len);
+  } catch (e) {
+    return false;
+  }
+
+  const unique: FontName[] = [];
+  for (let i = 0; i < fonts.length; i++) {
+    const f = fonts[i];
+    let exists = false;
+    for (let j = 0; j < unique.length; j++) {
+      const u = unique[j];
+      if (u.family === f.family && u.style === f.style) {
+        exists = true;
+        break;
+      }
+    }
+    if (!exists) unique.push(f);
+  }
+
+  for (let i = 0; i < unique.length; i++) {
+    const font = unique[i];
+
+    // Early skip for known problematic fonts
+    if (font.family.indexOf("RNHouseSansW01") !== -1) return false;
+
+    try {
+      await figma.loadFontAsync(font);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  return true;
+}
