@@ -1,8 +1,8 @@
 "use strict";
-// ======================================================
-//  WFF Setup — Figma Plugin Backend (stable version)
-// ======================================================
-console.log("PLUGIN VERSION: 5.6");
+console.log("PLUGIN VERSION: 5.7");
+// ==============================================
+//  SET VARIABLES
+// =============================================
 const TARGET = "[Company Name]";
 // US ↔ UK spelling maps
 const US_TO_UK = {
@@ -27,8 +27,18 @@ const UK_TO_US = {
     "specialise": "specialize",
     "specialised": "specialized"
 };
-figma.showUI(__html__, { width: 350, height: 400 });
-//Case matching helper function
+let companyInit = false;
+let contractorInit = false;
+let vmsInit = false;
+let localeInit = false;
+// ==============================================
+// UTILITY FUNCTIONS
+// ==============================================
+// Utility: delay so UI can render each progress message
+function delay(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+// Utility: case‑matching for contractor replacement
 function matchCase(source, target) {
     // ALL CAPS
     if (source === source.toUpperCase()) {
@@ -41,9 +51,8 @@ function matchCase(source, target) {
     // Default: lowercase
     return target.toLowerCase();
 }
+figma.showUI(__html__, { width: 350, height: 400 });
 figma.ui.onmessage = async (msg) => {
-    // This is how Figma actually delivers pluginMessage:
-    // msg = { type, value, locale }
     console.log("RAW MESSAGE:", msg);
     if (!msg || msg.type !== "replace") {
         return;
@@ -64,8 +73,6 @@ figma.ui.onmessage = async (msg) => {
     const escapedTarget = TARGET.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const tokenRegex = new RegExp(escapedTarget, "g");
     const companyRegex = /companyname/g;
-    const contractorRegex = /\bcontractor\b/gi;
-    const contractorsRegex = /\bcontractors\b/gi;
     const localeMap = locale === "uk" ? US_TO_UK : UK_TO_US;
     const localeKeys = Object.keys(localeMap).join("|");
     // Non-global regex for checking
@@ -88,7 +95,15 @@ figma.ui.onmessage = async (msg) => {
             continue;
         let updated = original;
         // Stage 1 — Company name replacement
-        figma.ui.postMessage({ type: "progress", stage: "company" });
+        if (!companyInit) {
+            companyInit = true;
+            figma.ui.postMessage({
+                type: "progress",
+                stage: "company",
+                name: replacement
+            });
+            await delay(750);
+        }
         if (updated.indexOf(TARGET) !== -1) {
             updated = updated.replace(tokenRegex, replacement);
         }
@@ -97,12 +112,16 @@ figma.ui.onmessage = async (msg) => {
         }
         // Stage 1b — Contractor replacement
         if (contractor) {
+            if (!contractorInit) {
+                contractorInit = true;
+                figma.ui.postMessage({
+                    type: "progress",
+                    stage: "contractor",
+                    name: contractor
+                });
+                await delay(750);
+            }
             const contractorLower = contractor.toLowerCase();
-            figma.ui.postMessage({
-                type: "progress",
-                stage: "contractor",
-                name: contractorLower
-            });
             // Plural first
             updated = updated.replace(/\bcontractors\b/gi, (match) => {
                 const plural = contractorLower + "s";
@@ -113,17 +132,27 @@ figma.ui.onmessage = async (msg) => {
                 return matchCase(match, contractorLower);
             });
         }
-        // VMS replacement (NO case matching)
+        // Stage 2 - VMS replacement (NO case matching)
         if (vms) {
-            figma.ui.postMessage({
-                type: "progress",
-                stage: "vms",
-                name: vms
-            });
+            if (!vmsInit) {
+                vmsInit = true;
+                figma.ui.postMessage({
+                    type: "progress",
+                    stage: "vms",
+                    name: vms
+                });
+                await delay(750);
+            }
             updated = updated.replace(/\bvms\b/gi, vms);
         }
-        // Stage 2 — Locale conversion
-        figma.ui.postMessage({ type: "progress", stage: "locale" });
+        // Stage 3 — Locale conversion
+        if (!localeInit) {
+            localeInit = true;
+            figma.ui.postMessage({
+                type: "progress",
+                stage: "locale"
+            });
+        }
         updated = updated.replace(localeReplaceRegex, (match) => {
             const key = match.toLowerCase();
             return localeMap[key] || match;

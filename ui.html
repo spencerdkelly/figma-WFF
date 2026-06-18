@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<script>console.log("UI VERSION: 5.6");</script>
+<script>console.log("UI VERSION: 5.7");</script>
 <html>
   <head>
     <meta charset="UTF-8" />
@@ -82,12 +82,12 @@
   <body>
     <label>
       Company name
-      <input id="input" type="text" placeholder="Company" />
+      <input id="input" type="text" placeholder="Lonza, NatWest etc" />
     </label>
 
     <label>
         Contractor name
-        <input id="contractorInput" type="text" placeholder="Contractor, Contingent Worker " />
+        <input id="contractorInput" type="text" placeholder="Contractor, Contingent Worker etc" />
     </label>
 
     <label>
@@ -123,9 +123,11 @@
         }
 
         if (!input) {
-          status.textContent = "Please enter a company name.";
-          return;
+            status.textContent = "⚠️ You must enter a company name.";
+            button.classList.remove("loading");
+            return;
         }
+
 
         // Show loading state
         button.classList.add("loading");
@@ -159,7 +161,8 @@
 
         if (msg.type === "progress") {
           if (msg.stage === "company") {
-            status.textContent = "Updating company name…";
+            //status.textContent = "Updating company name…";
+            status.textContent = `Updating company name to "${msg.name}"…`
           }
 
           if (msg.stage === "contractor") {
