@@ -31,7 +31,24 @@ const UK_TO_US: { [key: string]: string } = {
   "specialised": "specialized"
 };
 
-figma.showUI(__html__, { width: 350, height: 250 });
+figma.showUI(__html__, { width: 350, height: 400 });
+
+//Case matching helper function
+function matchCase(source: string, target: string): string {
+  // ALL CAPS
+  if (source === source.toUpperCase()) {
+    return target.toUpperCase();
+  }
+
+  // Capitalised (Title Case)
+  if (source[0] === source[0].toUpperCase()) {
+    return target.charAt(0).toUpperCase() + target.slice(1).toLowerCase();
+  }
+
+  // Default: lowercase
+  return target.toLowerCase();
+}
+
 
 figma.ui.onmessage = async (msg) => {
   // This is how Figma actually delivers pluginMessage:
@@ -39,12 +56,14 @@ figma.ui.onmessage = async (msg) => {
   console.log("RAW MESSAGE:", msg);
 
   if (!msg || msg.type !== "replace") {
-    console.log("Message ignored:", msg);
     return;
   }
 
   const replacement = msg.value.trim();
   const locale = msg.locale || "us";
+  const contractor = msg.contractor.trim() || "";
+  const vms = msg.vms.trim() || "";
+
 
   if (!replacement) {
     figma.ui.postMessage({ type: "done" });
@@ -64,6 +83,8 @@ figma.ui.onmessage = async (msg) => {
   const escapedTarget = TARGET.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const tokenRegex = new RegExp(escapedTarget, "g");
   const companyRegex = /companyname/g;
+  const contractorRegex = /\bcontractor\b/gi;
+  const contractorsRegex = /\bcontractors\b/gi;
 
   const localeMap = locale === "uk" ? US_TO_UK : UK_TO_US;
   const localeKeys = Object.keys(localeMap).join("|");
@@ -74,7 +95,6 @@ figma.ui.onmessage = async (msg) => {
   // Global regex for replacing
   const localeReplaceRegex = new RegExp("\\b(" + localeKeys + ")\\b", "gi");
 
-  console.log("TEXT NODE COUNT:", textNodes.length);
   for (const node of textNodes) {
     const original = node.characters;
     if (!original || original.length === 0) continue;
@@ -83,10 +103,12 @@ figma.ui.onmessage = async (msg) => {
 
     const needsCompany =
       original.indexOf(TARGET) !== -1 || lower.indexOf("companyname") !== -1;
-
+    const needsContractor = lower.includes("contractor") || lower.includes("contractors");
     const needsLocale = localeTestRegex.test(lower);
+    const needsVms = lower.includes("vms");
 
-    if (!needsCompany && !needsLocale) continue;
+    if (!needsCompany && !needsLocale && !needsContractor && !needsVms) continue;
+
 
     const fontsOk = await loadAllFontsInNode(node);
     if (!fontsOk) continue;
@@ -102,6 +124,40 @@ figma.ui.onmessage = async (msg) => {
     if (updated.toLowerCase().indexOf("companyname") !== -1) {
       updated = updated.replace(companyRegex, slug);
     }
+
+    // Stage 1b — Contractor replacement
+    if (contractor) {
+      const contractorLower = contractor.toLowerCase();
+
+      figma.ui.postMessage({
+        type: "progress",
+        stage: "contractor",
+        name: contractorLower
+      });
+
+      // Plural first
+      updated = updated.replace(/\bcontractors\b/gi, (match) => {
+        const plural = contractorLower + "s";
+        return matchCase(match, plural);
+      });
+
+      // Singular
+      updated = updated.replace(/\bcontractor\b/gi, (match) => {
+        return matchCase(match, contractorLower);
+      });
+    }
+
+    // VMS replacement (NO case matching)
+    if (vms) {
+      figma.ui.postMessage({
+        type: "progress",
+        stage: "vms",
+        name: vms
+      });
+
+      updated = updated.replace(/\bvms\b/gi, vms);
+    }
+
 
     // Stage 2 — Locale conversion
     figma.ui.postMessage({ type: "progress", stage: "locale" });

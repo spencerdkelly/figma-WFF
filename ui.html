@@ -81,12 +81,22 @@
 
   <body>
     <label>
-      Enter company name:
+      Company name
       <input id="input" type="text" placeholder="Company" />
     </label>
 
+    <label>
+        Contractor name
+        <input id="contractorInput" type="text" placeholder="Contractor, Contingent Worker " />
+    </label>
+
+    <label>
+        VMS name
+        <input id="vmsInput" type="text" placeholder="VMS, Fieldglass etc" />
+    </label>
+
     <div class="locale-group">
-      <strong>English variant:</strong><br />
+      <strong>Spelling</strong><br />
       <label><input type="radio" name="locale" value="us" checked /> US English</label>
       <label><input type="radio" name="locale" value="uk" /> UK English</label>
     </div>
@@ -121,16 +131,24 @@
         button.classList.add("loading");
         status.textContent = "Starting…";
 
+        //Get contractor label input value
+        const contractorValue = document.getElementById("contractorInput").value.trim();
+
+        const vmsValue = document.getElementById("vmsInput").value.trim();
+
         parent.postMessage(
         {
             pluginMessage: {
-                type: "replace",
-                value: input,
-                locale: selectedLocale
+            type: "replace",
+            value: input,
+            locale: selectedLocale,
+            contractor: contractorValue,
+            vms: vmsValue
             }
         },
         "*"
         );
+
 
       };
 
@@ -143,6 +161,14 @@
           if (msg.stage === "company") {
             status.textContent = "Updating company name…";
           }
+
+          if (msg.stage === "contractor") {
+            status.textContent = `Updating contractor label to "${msg.name}"…`;
+         }
+
+         if (msg.stage === "vms") {
+            status.textContent = `Updating VMS label to "${msg.name}"…`;
+        }
 
           if (msg.stage === "locale") {
             status.textContent =
